@@ -104,6 +104,7 @@ switch density_type
 end
 
 % density plot
+figure,
 h{1} = area(Xi, f); hold on
 set(h{1}, 'FaceColor', color);
 set(h{1}, 'EdgeColor', cloud_edge_col);

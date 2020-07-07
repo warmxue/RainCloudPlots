@@ -76,8 +76,8 @@ for i = 1:n_plots_per_series
     end
 end
 
-% determine spacing between plots
-spacing     = 2 * mean(mean(cellfun(@max, ks)));
+% determine spacing between plots, in y direction
+spacing     = 4 * mean(mean(cellfun(@max, ks)));% default: 2
 ks_offsets  = [0:n_plots_per_series-1] .* spacing;
 
 % flip so first plot in series is plotted on the *top*
@@ -94,26 +94,39 @@ end
 
 %% jitter for the raindrops
 
-jit_width = spacing / 8;
+jit_width = spacing / (2*(n_series + 1));% default: 8
+
+%% linewidth
+line_width = 2;
+%% transparency
+alpha = 0.5;
+%% black color
+bcolor = [0 0 0];
 
 % TO-DO: This should probably not be hardcoded either...
 % Although it can be overridden later
-raindrop_size = 100;
+raindrop_size = 50;%default: 100;
 
-for i = 1:n_plots_per_series
-    for j = 1:n_series
-        jit{i,j} = jit_width + rand(1, length(data{i,j})) * jit_width;
+for i = 1:n_plots_per_series % timepoints
+    for j = 1:n_series % group
+        jit{i,j} = j * jit_width + rand(1, length(data{i,j})) * jit_width;
     end
+    
 end
 
 %% means (for mean dots)
 
 cell_means = cellfun(@mean, data);
-
+cell_quartiles = cellfun(@(x) quantile(x, [0.25 0.75 0.5]), data, 'UniformOutput', false);
+cell_iqr = cellfun(@(x) x(2) - x(1), cell_quartiles, 'UniformOutput', false);
+cell_Xs = cellfun(@(x) sort(x), data, 'UniformOutput', false);
+cell_whiskers = cellfun(@(x, y, z) [min(x(x > (y(1) - (1.5 * z)))), max(x(x < (y(2) + (1.5 * z))))], cell_Xs, cell_quartiles, cell_iqr, 'UniformOutput', false);
+% 0.25, 0.75, median, min, max
+cell_Y = cellfun(@(x, y) [x, y], cell_quartiles, cell_whiskers, 'UniformOutput', false);
 %% plot
 % note - we *could* plot everything here in one big loop, but then
 % different figure parts would overlay each other in a silly way.
-
+% figure,
 hold on
 
 % patches
@@ -121,10 +134,10 @@ for i = 1:n_plots_per_series
     for j = 1:n_series
         
         % plot patches
-        h.p{i, j} = patch('Faces', faces{i, j}, 'Vertices', verts{i, j}, 'FaceVertexCData', colours(j, :), 'FaceColor', 'flat', 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+        h.p{i, j} = patch('Faces', faces{i, j}, 'Vertices', verts{i, j}, 'FaceVertexCData', colours(j, :), 'FaceColor', 'flat', 'EdgeColor', 'none', 'FaceAlpha', alpha);
         
         % scatter rainclouds
-        h.s{i, j} = scatter(data{i, j}, -jit{i, j} + ks_offsets(i), 'MarkerFaceColor', colours(j, :), 'MarkerEdgeColor', 'none', 'MarkerFaceAlpha', 0.5, 'SizeData', raindrop_size);
+        h.s{i, j} = scatter(data{i, j}, -jit{i, j} + ks_offsets(i), 'MarkerFaceColor', colours(j, :), 'MarkerEdgeColor', 'none', 'MarkerFaceAlpha', alpha, 'SizeData', raindrop_size);
         
     end
 end
@@ -133,7 +146,7 @@ end
 for i = 1:n_plots_per_series - 1 % We have n_plots_per_series-1 lines because lines connect pairs of points
     for j = 1:n_series
         
-        h.l(i, j) = line(cell_means([i i+1], j), ks_offsets([i i+1]), 'LineWidth', 4, 'Color', colours(j, :));
+        h.l(i, j) = line(cell_means([i i+1], j), ks_offsets([i i+1]), 'LineStyle', ':', 'LineWidth', line_width, 'Color', colours(j, :));
         
     end
 end
@@ -142,10 +155,38 @@ end
 for i = 1:n_plots_per_series
     for j = 1:n_series
         
-        h.m(i, j) = scatter(cell_means(i, j), ks_offsets(i), 'MarkerFaceColor', colours(j, :), 'MarkerEdgeColor', [0 0 0], 'MarkerFaceAlpha', 1, 'SizeData', raindrop_size * 2, 'LineWidth', 2);
+        h.m(i, j) = scatter(cell_means(i, j), ks_offsets(i), 'MarkerFaceColor', colours(j, :), 'MarkerEdgeColor', bcolor, 'MarkerFaceAlpha', 1, 'SizeData', raindrop_size * 2, 'LineWidth', line_width);
     
     end
 end
+
+% width of boxplot
+% make some space under the density plot for the boxplot and raindrops
+yl = get(gca, 'YLim');
+% set(gca, 'YLim', [-yl(2)*lwr_bnd yl(2)]);
+wdth = 0.1;%yl(2) * 0.25;
+% plot whiskers
+for i = 1:n_plots_per_series
+    for j = 1:n_series
+        Y = cell_Y{i, j};
+        box_pos = [Y(1), mean(-jit{i, j}) + ks_offsets(i)-0.5*wdth, Y(2)-Y(1), wdth]; %[x, y, w, h]
+        % mean line
+        h.ml(i, j) = line([Y(3) Y(3)], [(mean(-jit{i, j}) + ks_offsets(i)-(wdth * 0.5)), (mean(-jit{i, j}) +ks_offsets(i) + (wdth * 0.5))], 'col', bcolor, 'LineWidth', line_width);
+        
+        % whiskers
+        h.w1(i, j) = line([Y(2) Y(5)], [(mean(-jit{i, j}) +ks_offsets(i)), (mean(-jit{i, j}) +ks_offsets(i))], 'col', [bcolor, alpha], 'LineWidth', line_width);
+        h.w2(i, j) = line([Y(1) Y(4)], [(mean(-jit{i, j}) +ks_offsets(i)), (mean(-jit{i, j}) +ks_offsets(i))], 'col', [bcolor, alpha], 'LineWidth', line_width);
+        
+        % 'box' of 'boxplot'
+        h.b(i,j) = rectangle('Position', box_pos);
+        set(h.b(i,j), 'EdgeColor', [bcolor, alpha])
+%         set(h.b(i, j), 'FaceColor', [colours(j, :), alpha])
+        set(h.b(i,j), 'LineWidth', line_width);
+        %set(h{3}, 'FaceColor', bxfacecl);
+        % could also set 'FaceColor' here, etc
+    end
+end
+
 
 %% clear up axis labels
 
